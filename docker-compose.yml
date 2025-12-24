@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  shipping-monitor:
+    build: .
+    container_name: shipping-monitor
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./data:/app/data
+      - ./shipping.db:/app/shipping.db
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DEFAULT_POLL_INTERVAL_MINUTES=30
+      - MIN_POLL_INTERVAL_MINUTES=15
+      # Email settings (optional)
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - NOTIFICATION_EMAIL=${NOTIFICATION_EMAIL:-}
+      # Discord settings (optional)
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
