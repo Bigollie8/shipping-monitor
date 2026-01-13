@@ -102,6 +102,7 @@ class UPSScraper extends BaseCarrierScraper {
         '--disable-dev-shm-usage',
         '--disable-blink-features=AutomationControlled',
         '--disable-infobars',
+        '--disable-gpu',
         '--window-size=1920,1080'
       ]
     });
@@ -110,34 +111,61 @@ class UPSScraper extends BaseCarrierScraper {
       const page = await browser.newPage();
 
       await page.setViewport({ width: 1920, height: 1080 });
-      await page.setUserAgent(this.getRandomUserAgent());
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+
+      // Remove webdriver detection
+      await page.evaluateOnNewDocument(() => {
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+        Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+        window.chrome = { runtime: {} };
+      });
 
       await page.setExtraHTTPHeaders({
         'Accept-Language': 'en-US,en;q=0.9',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'sec-ch-ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"'
       });
 
       const trackUrl = `https://www.ups.com/track?loc=en_US&tracknum=${trackingNumber}`;
       console.log(`[UPS] Navigating to ${trackUrl}`);
 
-      await page.goto(trackUrl, { waitUntil: 'networkidle2', timeout: 45000 });
+      // Navigate and wait for network to be mostly idle
+      await page.goto(trackUrl, { waitUntil: 'networkidle0', timeout: 60000 });
 
-      // Wait for tracking content to load
-      const selectors = [
+      // Wait for the app to initialize - look for React root or tracking content
+      console.log('[UPS] Waiting for tracking content to load...');
+
+      // Wait for any of these selectors that indicate tracking data loaded
+      const contentSelectors = [
         '#stApp_trackingNumber',
-        '.ups-heading',
-        '[data-test="shipment-status"]',
-        '.st_App-header',
-        '.st_Delivery-status',
-        '#st_App_TrackingSummary'
+        '.st_App-statusHeader',
+        '[class*="tracking"]',
+        '[class*="shipment"]',
+        '[class*="delivery"]',
+        '.ups-card'
       ];
 
-      await page.waitForSelector(selectors.join(', '), {
-        timeout: 15000
-      }).catch(() => {});
+      await page.waitForSelector(contentSelectors.join(', '), {
+        timeout: 20000
+      }).catch(() => console.log('[UPS] Primary selectors not found, continuing...'));
 
-      // Give extra time for dynamic content
-      await new Promise(resolve => setTimeout(resolve, 4000));
+      // Wait additional time for React to render
+      await new Promise(resolve => setTimeout(resolve, 8000));
+
+      // Check if we need to wait more by checking body length
+      let bodyLength = await page.evaluate(() => document.body.innerText.length);
+      console.log(`[UPS] Initial body length: ${bodyLength}`);
+
+      // If body is too small, wait more
+      if (bodyLength < 5000) {
+        console.log('[UPS] Page still loading, waiting longer...');
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        bodyLength = await page.evaluate(() => document.body.innerText.length);
+        console.log(`[UPS] Body length after extra wait: ${bodyLength}`);
+      }
 
       const result = await page.evaluate(() => {
         let status = 'Unknown';
