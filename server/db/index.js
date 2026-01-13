@@ -3,7 +3,9 @@ const fs = require('fs');
 const path = require('path');
 const migrations = require('./migrations');
 
-const dbPath = path.join(__dirname, '..', '..', 'shipping.db');
+// Use /app/data for persistence when mounted, fallback to local directory
+const dataDir = process.env.DATA_DIR || path.join(__dirname, '..', '..', 'data');
+const dbPath = path.join(dataDir, 'shipping.db');
 let db = null;
 let saveTimeout = null;
 let isSaving = false;
