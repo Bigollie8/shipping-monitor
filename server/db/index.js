@@ -5,6 +5,9 @@ const migrations = require('./migrations');
 
 const dbPath = path.join(__dirname, '..', '..', 'shipping.db');
 let db = null;
+let saveTimeout = null;
+let isSaving = false;
+const SAVE_DEBOUNCE_MS = 1000; // Debounce writes by 1 second
 
 async function initializeDb() {
   const SQL = await initSqlJs();
@@ -27,6 +30,36 @@ async function initializeDb() {
 }
 
 function saveDb() {
+  if (!db) return;
+
+  // Debounce saves to prevent blocking on every query
+  if (saveTimeout) {
+    clearTimeout(saveTimeout);
+  }
+
+  saveTimeout = setTimeout(() => {
+    if (isSaving) return;
+    isSaving = true;
+
+    try {
+      const data = db.export();
+      const buffer = Buffer.from(data);
+      // Use async write to avoid blocking the event loop
+      fs.writeFile(dbPath, buffer, (err) => {
+        isSaving = false;
+        if (err) {
+          console.error('Database save error:', err.message);
+        }
+      });
+    } catch (err) {
+      isSaving = false;
+      console.error('Database export error:', err.message);
+    }
+  }, SAVE_DEBOUNCE_MS);
+}
+
+// Force immediate synchronous save (for shutdown)
+function saveDbSync() {
   if (db) {
     const data = db.export();
     const buffer = Buffer.from(data);
@@ -205,6 +238,7 @@ module.exports = {
   initializeDb,
   getDb,
   saveDb,
+  saveDbSync,
   getShipments,
   getShipmentById,
   getShipmentHistory,

@@ -4,6 +4,16 @@ const { detectCarrier, extractTrackingNumber, normalizeStatus } = require('./car
 const rateLimiter = require('./rateLimiter');
 const notifications = require('./notifications');
 
+const SCRAPER_TIMEOUT_MS = 45000; // 45 second timeout per shipment
+
+function withTimeout(promise, ms, errorMessage) {
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(errorMessage)), ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
+}
+
 async function checkShipment(shipmentId) {
   const shipment = db.getShipmentById(shipmentId);
   if (!shipment) {
@@ -24,13 +34,17 @@ async function checkShipment(shipmentId) {
 
   const scraper = getScraper(carrier);
 
-  const result = await rateLimiter.enqueue({
-    carrier,
-    execute: async () => {
-      console.log(`Checking shipment ${shipmentId} (${carrier})`);
-      return await scraper.track(shipment.tracking_url, trackingNumber);
-    }
-  });
+  const result = await withTimeout(
+    rateLimiter.enqueue({
+      carrier,
+      execute: async () => {
+        console.log(`Checking shipment ${shipmentId} (${carrier})`);
+        return await scraper.track(shipment.tracking_url, trackingNumber);
+      }
+    }),
+    SCRAPER_TIMEOUT_MS,
+    `Timeout checking shipment ${shipmentId} (${carrier}) after ${SCRAPER_TIMEOUT_MS / 1000}s`
+  );
 
   const normalizedStatus = normalizeStatus(result.status);
   const now = new Date().toISOString();

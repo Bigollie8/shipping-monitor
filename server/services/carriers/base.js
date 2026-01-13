@@ -16,14 +16,18 @@ class BaseCarrierScraper {
   }
 
   async fetchPage(url, options = {}) {
-    const response = await axios.get(url, {
+    const method = options.method || 'GET';
+    const response = await axios({
+      method,
+      url,
       headers: {
         'User-Agent': this.getRandomUserAgent(),
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept': method === 'POST' ? 'application/json' : 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.5',
         ...options.headers
       },
       timeout: 30000,
+      ...(options.data && { data: options.data }),
       ...options
     });
     return response.data;

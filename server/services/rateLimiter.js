@@ -1,3 +1,5 @@
+const TASK_TIMEOUT_MS = 60000; // 60 second timeout per task
+
 class RateLimiter {
   constructor() {
     this.carrierLastCheck = new Map();
@@ -17,6 +19,14 @@ class RateLimiter {
 
     this.maxBackoff = 4 * 60 * 60 * 1000;
     this.baseBackoff = 5 * 60 * 1000;
+  }
+
+  executeWithTimeout(fn, ms) {
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error(`Task timed out after ${ms / 1000}s`)), ms);
+    });
+    return Promise.race([fn(), timeoutPromise]).finally(() => clearTimeout(timeoutId));
   }
 
   getMinInterval(carrier) {
@@ -79,7 +89,7 @@ class RateLimiter {
 
       try {
         this.recordCheck(task.carrier);
-        const result = await task.execute();
+        const result = await this.executeWithTimeout(task.execute, TASK_TIMEOUT_MS);
         this.recordSuccess(task.carrier);
         resolve(result);
       } catch (error) {

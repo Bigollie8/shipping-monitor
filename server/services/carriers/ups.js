@@ -22,7 +22,9 @@ class UPSScraper extends BaseCarrierScraper {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'Origin': 'https://www.ups.com',
+          'Referer': 'https://www.ups.com/track?loc=en_US&tracknum=' + trackingNumber
         },
         data: JSON.stringify({
           Locale: 'en_US',
